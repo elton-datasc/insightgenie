@@ -1,32 +1,43 @@
+from graph.workflow import graph
 from database.duckdb_client import DatabaseClient
-from agents.sql_agent import generate_sql
 
 
 database = DatabaseClient()
 
-database.load_data("data/sales.csv")
+database.load_data(
+    "data/sales.csv"
+)
 
 schema = database.get_schema().to_string()
 
 
 while True:
 
-    question = input("\nPergunta: ")
+    question = input(
+        "\nPergunta: "
+    )
 
     if question.lower() == "sair":
         break
 
-    sql = generate_sql(
-        question=question,
-        schema=schema
+    initial_state = {
+        "question": question,
+        "schema": schema,
+        "sql": "",
+        "query_result": "",
+        "answer": "",
+        "error": ""
+    }
+
+    result = graph.invoke(
+        initial_state
     )
 
     print("\nSQL gerado:")
-
-    print(sql)
-
-    result = database.execute(sql)
+    print(result["sql"])
 
     print("\nResultado:")
+    print(result["query_result"])
 
-    print(result)
+    print("\nInsightGenie:")
+    print(result["answer"])
