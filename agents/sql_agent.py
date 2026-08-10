@@ -1,13 +1,12 @@
 import os
-from pathlib import Path
+from typing import Optional
 
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-try:
-    from dotenv import load_dotenv
-except Exception:
-    load_dotenv = None
+
+load_dotenv()
 
 
 class SQLResponse(BaseModel):
@@ -16,66 +15,55 @@ class SQLResponse(BaseModel):
     )
 
 
-def _get_structured_llm() -> any:
-    """Create and return a structured LLM instance.
+# Lazily-created structured LLM. This avoids instantiating the OpenAI client
+# at import-time (which previously caused an error when credentials were
+# missing). Use `_get_structured_llm()` inside runtime paths so missing
+# credentials are reported only when the LLM is actually needed.
+_structured_llm: Optional[object] = None
 
-    This function reads `OPENAI_API_KEY` from the environment. Callers may
-    set the environment variable themselves (or pass an `api_key` to
-    `generate_sql`, which will set it temporarily).
-    """
-    # Attempt to load from a .env file if the key is not already present.
-    if "OPENAI_API_KEY" not in os.environ:
-        if load_dotenv is not None:
-            # Prefer a .env in repo root
-            env_path = Path(__file__).resolve().parents[1] / ".env"
-            load_dotenv(env_path)
 
-    if "OPENAI_API_KEY" not in os.environ:
+def _get_structured_llm():
+    global _structured_llm
+    if _structured_llm is not None:
+        return _structured_llm
+
+    # Require at least one well-known OpenAI env var to be present.
+    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_ADMIN_KEY")):
         raise RuntimeError(
-            "Missing OpenAI API key. Set the OPENAI_API_KEY environment variable "
-            "or call generate_sql(..., api_key=...) to provide one."
+            "Missing OpenAI credentials. Set the OPENAI_API_KEY or OPENAI_ADMIN_KEY environment variable, "
+            "or pass credentials to the client."
         )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    return llm.with_structured_output(SQLResponse)
+    llm = ChatOpenAI(
+        model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+        temperature=0,
+    )
+    _structured_llm = llm.with_structured_output(SQLResponse)
+    return _structured_llm
 
 
-def generate_sql(question: str, schema: str, api_key: str = None) -> str:
-    """Generate a DuckDB SQL query for the given question and schema.
-
-    If `api_key` is provided, it will be set into `OPENAI_API_KEY` for this
-    process (overwriting any existing value).
-    """
-    # If caller provided an API key, set it for this process.
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-
-    structured_llm = _get_structured_llm()
-
+def generate_sql(question: str, schema: str) -> str:
     prompt = f"""
 You are a SQL analyst.
 
-Database:
+Database schema:
 
 {schema}
 
 Table:
 sales
 
-Generate DuckDB SQL that answers the user question.
+Generate DuckDB SQL that answers the question.
 
 Rules:
-
-- Return only a valid SQL query.
-- Never modify data.
 - Only SELECT queries are allowed.
+- Never modify data.
 - Use only columns present in the schema.
 
 Question:
-
 {question}
 """
 
+    structured_llm = _get_structured_llm()
     response = structured_llm.invoke(prompt)
-
     return response.sql
