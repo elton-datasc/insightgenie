@@ -8,3 +8,4 @@ class AgentState(TypedDict):
     query_result: str
     answer: str
     error: str
+    retry_count: int
