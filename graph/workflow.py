@@ -2,78 +2,18 @@ import os
 from typing import Optional
 
 from dotenv import load_dotenv
-from langgraph.graph import StateGraph, START, END
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
 
-from graph.state import AgentState
 from agents.sql_agent import generate_sql
 from database.duckdb_client import DatabaseClient
+from graph.state import AgentState
 
-# Load local development credentials before any OpenAI client is created.
+
 load_dotenv()
 
 database = DatabaseClient()
-
 database.load_data("data/sales.csv")
-
-def generate_sql_node(state: AgentState):
-    sql = generate_sql(
-        question=state["question"],
-        schema=state["schema"]
-    )
-
-    return {
-        "sql": sql
-    }
-
-def validate_sql_node(state: AgentState):
-    sql = state["sql"].strip().lower()
-
-    forbidden_commands = [
-        "delete",
-        "drop",
-        "update",
-        "insert",
-        "alter",
-        "truncate"
-    ]
-
-    if not sql.startswith("select"):
-        return {
-            "error": "Only SELECT queries are allowed."
-        }
-
-    for command in forbidden_commands:
-        if command in sql:
-            return {
-                "error": f"Forbidden SQL command detected: {command}"
-            }
-
-    return {
-        "error": ""
-    }
-
-def execute_sql_node(state: AgentState):
-
-    if state["error"]:
-        return {}
-
-    try:
-        result = database.execute(
-            state["sql"]
-        )
-
-        return {
-            "query_result": result.to_string()
-        }
-
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
-
-
-from langchain_openai import ChatOpenAI
-
 
 _answer_llm: Optional[ChatOpenAI] = None
 
@@ -96,15 +36,78 @@ def _get_answer_llm() -> ChatOpenAI:
     return _answer_llm
 
 
-def generate_answer_node(state: AgentState):
+def generate_sql_node(state: AgentState):
+    sql = generate_sql(
+        question=state["question"],
+        schema=state["schema"],
+    )
+    return {"sql": sql, "error": ""}
 
+
+def validate_sql_node(state: AgentState):
+    sql = state["sql"].strip().lower()
+    forbidden_commands = [
+        "delete",
+        "drop",
+        "update",
+        "insert",
+        "alter",
+        "truncate",
+    ]
+
+    if not sql.startswith("select"):
+        return {"error": "Only SELECT queries are allowed."}
+
+    for command in forbidden_commands:
+        if command in sql:
+            return {"error": f"Forbidden SQL command detected: {command}"}
+
+    return {"error": ""}
+
+
+def route_after_validation(state: AgentState):
     if state["error"]:
-        return {
-            "answer": f"Não foi possível responder: {state['error']}"
-        }
+        if state["retry_count"] >= 2:
+            return "failed"
+        return "retry"
+    return "execute"
 
+
+def regenerate_sql_node(state: AgentState):
+    sql = generate_sql(
+        question=state["question"],
+        schema=state["schema"],
+        previous_sql=state["sql"],
+        error=state["error"],
+    )
+    return {
+        "sql": sql,
+        "error": "",
+        "retry_count": state["retry_count"] + 1,
+    }
+
+
+def execute_sql_node(state: AgentState):
+    try:
+        result = database.execute(state["sql"])
+        return {"query_result": result.to_string(), "error": ""}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def route_after_execution(state: AgentState):
+    if state["error"]:
+        if state["retry_count"] >= 2:
+            return "failed"
+        return "retry"
+    return "answer"
+
+
+def generate_answer_node(state: AgentState):
     prompt = f"""
-Answer the user's question using only the SQL result below.
+You are a business data analyst.
+
+Answer the question using only the SQL result.
 
 Question:
 {state["question"]}
@@ -112,66 +115,57 @@ Question:
 SQL:
 {state["sql"]}
 
-SQL result:
+Result:
 {state["query_result"]}
 
 Rules:
-- Do not invent information.
-- Base the answer only on the SQL result.
 - Answer in Portuguese.
+- Do not invent information.
+- Use only information present in the SQL result.
 """
-
     response = _get_answer_llm().invoke(prompt)
+    return {"answer": response.content}
 
+
+def failure_node(state: AgentState):
     return {
-        "answer": response.content
+        "answer": (
+            "Não consegui gerar uma consulta SQL válida "
+            "após múltiplas tentativas."
+        )
     }
 
+
 builder = StateGraph(AgentState)
+builder.add_node("generate_sql", generate_sql_node)
+builder.add_node("validate_sql", validate_sql_node)
+builder.add_node("regenerate_sql", regenerate_sql_node)
+builder.add_node("execute_sql", execute_sql_node)
+builder.add_node("generate_answer", generate_answer_node)
+builder.add_node("failure", failure_node)
 
-builder.add_node(
-    "generate_sql",
-    generate_sql_node
-)
-
-builder.add_node(
+builder.add_edge(START, "generate_sql")
+builder.add_edge("generate_sql", "validate_sql")
+builder.add_conditional_edges(
     "validate_sql",
-    validate_sql_node
+    route_after_validation,
+    {
+        "execute": "execute_sql",
+        "retry": "regenerate_sql",
+        "failed": "failure",
+    },
 )
-
-builder.add_node(
+builder.add_edge("regenerate_sql", "validate_sql")
+builder.add_conditional_edges(
     "execute_sql",
-    execute_sql_node
+    route_after_execution,
+    {
+        "answer": "generate_answer",
+        "retry": "regenerate_sql",
+        "failed": "failure",
+    },
 )
-
-builder.add_node(
-    "generate_answer",
-    generate_answer_node
-)
-
-builder.add_edge(
-    START,
-    "generate_sql"
-)
-
-builder.add_edge(
-    "generate_sql",
-    "validate_sql"
-)
-
-builder.add_edge(
-    "validate_sql",
-    "execute_sql"
-)
-
-builder.add_edge(
-    "execute_sql",
-    "generate_answer"
-)
-
-builder.add_edge(
-    "generate_answer",
-    END
-)
+builder.add_edge("generate_answer", END)
+builder.add_edge("failure", END)
 
 graph = builder.compile()

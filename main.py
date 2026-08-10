@@ -3,10 +3,7 @@ from database.duckdb_client import DatabaseClient
 
 
 database = DatabaseClient()
-
-database.load_data(
-    "data/sales.csv"
-)
+database.load_data("data/sales.csv")
 
 schema = database.get_schema().to_string()
 
@@ -26,18 +23,32 @@ while True:
         "sql": "",
         "query_result": "",
         "answer": "",
-        "error": ""
+        "error": "",
+        "retry_count": 0
     }
 
     result = graph.invoke(
         initial_state
     )
 
-    print("\nSQL gerado:")
-    print(result["sql"])
+    print("\nSQL final:")
+    print(
+        result["sql"]
+    )
 
-    print("\nResultado:")
-    print(result["query_result"])
+    print(
+        "\nTentativas de correção:",
+        result["retry_count"]
+    )
+
+    if result["query_result"]:
+
+        print("\nResultado SQL:")
+        print(
+            result["query_result"]
+        )
 
     print("\nInsightGenie:")
-    print(result["answer"])
+    print(
+        result["answer"]
+    )

@@ -6,19 +6,14 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 
-load_dotenv()
-
-
 class SQLResponse(BaseModel):
     sql: str = Field(
         description="SQL query generated from the user question"
     )
 
 
-# Lazily-created structured LLM. This avoids instantiating the OpenAI client
-# at import-time (which previously caused an error when credentials were
-# missing). Use `_get_structured_llm()` inside runtime paths so missing
-# credentials are reported only when the LLM is actually needed.
+load_dotenv()
+
 _structured_llm: Optional[object] = None
 
 
@@ -27,11 +22,10 @@ def _get_structured_llm():
     if _structured_llm is not None:
         return _structured_llm
 
-    # Require at least one well-known OpenAI env var to be present.
     if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_ADMIN_KEY")):
         raise RuntimeError(
-            "Missing OpenAI credentials. Set the OPENAI_API_KEY or OPENAI_ADMIN_KEY environment variable, "
-            "or pass credentials to the client."
+            "Missing OpenAI credentials. Add OPENAI_API_KEY to .env or set it "
+            "in the environment."
         )
 
     llm = ChatOpenAI(
@@ -42,28 +36,54 @@ def _get_structured_llm():
     return _structured_llm
 
 
-def generate_sql(question: str, schema: str) -> str:
+def generate_sql(
+    question: str,
+    schema: str,
+    previous_sql: str = "",
+    error: str = ""
+) -> str:
+
+    correction_context = ""
+
+    if previous_sql:
+        correction_context = f"""
+Previous SQL:
+
+{previous_sql}
+
+Problem detected:
+
+{error}
+
+Generate a corrected SQL query.
+"""
+
     prompt = f"""
-You are a SQL analyst.
+You are an expert DuckDB SQL analyst.
 
 Database schema:
 
 {schema}
 
-Table:
+Available table:
+
 sales
 
-Generate DuckDB SQL that answers the question.
+User question:
+
+{question}
+
+{correction_context}
 
 Rules:
-- Only SELECT queries are allowed.
-- Never modify data.
-- Use only columns present in the schema.
 
-Question:
-{question}
+- Generate only SELECT queries.
+- Never use INSERT, UPDATE, DELETE, DROP, ALTER or TRUNCATE.
+- Use only columns present in the schema.
+- Use only the sales table.
+- Return a valid DuckDB SQL query.
 """
 
-    structured_llm = _get_structured_llm()
-    response = structured_llm.invoke(prompt)
+    response = _get_structured_llm().invoke(prompt)
+
     return response.sql
