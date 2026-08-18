@@ -82,3 +82,32 @@ BUSINESS_DIMENSIONS = {
         "column": "month",
     },
 }
+
+def get_semantic_context() -> str:
+    lines = []
+
+    lines.append("BUSINESS METRICS:")
+
+    for key, metric in BUSINESS_METRICS.items():
+        lines.append(
+            f"""
+Metric: {metric["name"]}
+Identifier: {key}
+Definition: {metric["description"]}
+SQL definition: {metric["formula"]}
+"""
+        )
+
+    lines.append("\nBUSINESS DIMENSIONS:")
+
+    for key, dimension in BUSINESS_DIMENSIONS.items():
+        lines.append(
+            f"""
+Dimension: {dimension["name"]}
+Identifier: {key}
+Definition: {dimension["description"]}
+Column: {dimension["column"]}
+"""
+        )
+
+    return "\n".join(lines)
