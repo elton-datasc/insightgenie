@@ -1,8 +1,8 @@
 from typing import TypedDict
 
-
 class AgentState(TypedDict):
     question: str
+    normalized_question: str
 
     schema: str
     semantic_context: str
@@ -14,3 +14,5 @@ class AgentState(TypedDict):
     error: str
 
     retry_count: int
+
+

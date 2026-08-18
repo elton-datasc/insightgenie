@@ -111,6 +111,14 @@ provided in the semantic layer.
 your own interpretation.
 
 8. Generate valid DuckDB SQL.
+
+9. When the user refers to months using natural
+language, use the corresponding database value
+defined in TIME VALUE MAPPINGS.
+
+10. Never compare a database column against a
+natural-language value if the semantic layer
+provides its physical representation.
 """
 
     response = structured_llm.invoke(

@@ -1,3 +1,9 @@
+TIME_MAPPINGS = {
+    "janeiro": "2026-01",
+    "fevereiro": "2026-02",
+}
+
+
 BUSINESS_METRICS = {
     "revenue": {
         "name": "Receita",
@@ -83,6 +89,17 @@ BUSINESS_DIMENSIONS = {
     },
 }
 
+def normalize_business_terms(question: str) -> str:
+    normalized_question = question
+
+    for natural_value, database_value in TIME_MAPPINGS.items():
+        normalized_question = normalized_question.replace(
+            natural_value,
+            database_value
+        )
+
+    return normalized_question
+
 def get_semantic_context() -> str:
     lines = []
 
@@ -108,6 +125,13 @@ Identifier: {key}
 Definition: {dimension["description"]}
 Column: {dimension["column"]}
 """
+        )
+
+    lines.append("\nTIME VALUE MAPPINGS:")
+
+    for label, value in TIME_MAPPINGS.items():
+        lines.append(
+            f"- {label} = '{value}'"
         )
 
     return "\n".join(lines)

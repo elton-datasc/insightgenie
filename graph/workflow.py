@@ -10,6 +10,7 @@ from database.duckdb_client import DatabaseClient
 from graph.state import AgentState
 
 from semantic.business_metrics import get_semantic_context
+from semantic.business_metrics import normalize_business_terms
 
 
 load_dotenv()
@@ -27,6 +28,15 @@ def load_semantic_context_node(state: AgentState):
         "semantic_context": semantic_context
     }
 
+def normalize_question_node(state: AgentState):
+
+    normalized_question = normalize_business_terms(
+        state["question"].lower()
+    )
+
+    return {
+        "normalized_question": normalized_question
+    }
 
 def _get_answer_llm() -> ChatOpenAI:
     global _answer_llm
@@ -48,8 +58,12 @@ def _get_answer_llm() -> ChatOpenAI:
 
 def generate_sql_node(state: AgentState):
 
+    normalized_question = normalize_business_terms(
+        state["question"].lower()
+    )
+
     sql = generate_sql(
-        question=state["question"],
+        question=normalized_question,
         schema=state["schema"],
         semantic_context=state["semantic_context"],
     )
@@ -58,7 +72,6 @@ def generate_sql_node(state: AgentState):
         "sql": sql,
         "error": "",
     }
-
 
 def validate_sql_node(state: AgentState):
     sql = state["sql"].strip().lower()
@@ -91,8 +104,12 @@ def route_after_validation(state: AgentState):
 
 def regenerate_sql_node(state: AgentState):
 
+    normalized_question = normalize_business_terms(
+        state["question"].lower()
+    )
+
     sql = generate_sql(
-        question=state["question"],
+        question=normalized_question,
         schema=state["schema"],
         semantic_context=state["semantic_context"],
         previous_sql=state["sql"],
@@ -104,7 +121,6 @@ def regenerate_sql_node(state: AgentState):
         "error": "",
         "retry_count": state["retry_count"] + 1,
     }
-
 
 def execute_sql_node(state: AgentState):
     try:
