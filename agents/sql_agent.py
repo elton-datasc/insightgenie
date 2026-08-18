@@ -1,7 +1,3 @@
-import os
-from typing import Optional
-
-from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
@@ -12,78 +8,96 @@ class SQLResponse(BaseModel):
     )
 
 
-load_dotenv()
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0
+)
 
-_structured_llm: Optional[object] = None
 
-
-def _get_structured_llm():
-    global _structured_llm
-    if _structured_llm is not None:
-        return _structured_llm
-
-    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_ADMIN_KEY")):
-        raise RuntimeError(
-            "Missing OpenAI credentials. Add OPENAI_API_KEY to .env or set it "
-            "in the environment."
-        )
-
-    llm = ChatOpenAI(
-        model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        temperature=0,
-    )
-    _structured_llm = llm.with_structured_output(SQLResponse)
-    return _structured_llm
+structured_llm = llm.with_structured_output(
+    SQLResponse
+)
 
 
 def generate_sql(
     question: str,
     schema: str,
+    semantic_context: str,
     previous_sql: str = "",
-    error: str = ""
+    error: str = "",
 ) -> str:
 
     correction_context = ""
 
     if previous_sql:
+
         correction_context = f"""
+A previous SQL query failed.
+
 Previous SQL:
 
 {previous_sql}
 
-Problem detected:
+Error:
 
 {error}
 
-Generate a corrected SQL query.
+Generate a corrected query.
 """
 
     prompt = f"""
-You are an expert DuckDB SQL analyst.
+You are an expert business data analyst
+specialized in DuckDB SQL.
 
-Database schema:
+DATABASE SCHEMA:
 
 {schema}
 
-Available table:
 
-sales
+BUSINESS SEMANTIC LAYER:
 
-User question:
+{semantic_context}
+
+
+USER QUESTION:
 
 {question}
 
+
 {correction_context}
 
-Rules:
 
-- Generate only SELECT queries.
-- Never use INSERT, UPDATE, DELETE, DROP, ALTER or TRUNCATE.
-- Use only columns present in the schema.
-- Use only the sales table.
-- Return a valid DuckDB SQL query.
+RULES:
+
+1. Generate only SELECT queries.
+
+2. Never use:
+INSERT
+UPDATE
+DELETE
+DROP
+ALTER
+TRUNCATE
+
+3. Use only the sales table.
+
+4. Use only columns available
+in the provided schema.
+
+5. When the user refers to a business
+metric, strictly follow the definition
+provided in the semantic layer.
+
+6. Do not invent business formulas.
+
+7. Prefer semantic definitions over
+your own interpretation.
+
+8. Generate valid DuckDB SQL.
 """
 
-    response = _get_structured_llm().invoke(prompt)
+    response = structured_llm.invoke(
+        prompt
+    )
 
     return response.sql

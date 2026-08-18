@@ -47,11 +47,17 @@ def _get_answer_llm() -> ChatOpenAI:
 
 
 def generate_sql_node(state: AgentState):
+
     sql = generate_sql(
         question=state["question"],
         schema=state["schema"],
+        semantic_context=state["semantic_context"],
     )
-    return {"sql": sql, "error": ""}
+
+    return {
+        "sql": sql,
+        "error": "",
+    }
 
 
 def validate_sql_node(state: AgentState):
@@ -84,12 +90,15 @@ def route_after_validation(state: AgentState):
 
 
 def regenerate_sql_node(state: AgentState):
+
     sql = generate_sql(
         question=state["question"],
         schema=state["schema"],
+        semantic_context=state["semantic_context"],
         previous_sql=state["sql"],
         error=state["error"],
     )
+
     return {
         "sql": sql,
         "error": "",
@@ -147,6 +156,7 @@ def failure_node(state: AgentState):
 
 
 builder = StateGraph(AgentState)
+builder.add_node("load_semantic_context",load_semantic_context_node)
 builder.add_node("generate_sql", generate_sql_node)
 builder.add_node("validate_sql", validate_sql_node)
 builder.add_node("regenerate_sql", regenerate_sql_node)
@@ -154,7 +164,8 @@ builder.add_node("execute_sql", execute_sql_node)
 builder.add_node("generate_answer", generate_answer_node)
 builder.add_node("failure", failure_node)
 
-builder.add_edge(START, "generate_sql")
+builder.add_edge(START,"load_semantic_context")
+builder.add_edge("load_semantic_context","generate_sql")
 builder.add_edge("generate_sql", "validate_sql")
 builder.add_conditional_edges(
     "validate_sql",
