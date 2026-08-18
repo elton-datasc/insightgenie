@@ -9,6 +9,8 @@ from agents.sql_agent import generate_sql
 from database.duckdb_client import DatabaseClient
 from graph.state import AgentState
 
+from semantic.business_metrics import get_semantic_context
+
 
 load_dotenv()
 
@@ -16,6 +18,14 @@ database = DatabaseClient()
 database.load_data("data/sales.csv")
 
 _answer_llm: Optional[ChatOpenAI] = None
+
+def load_semantic_context_node(state: AgentState):
+
+    semantic_context = get_semantic_context()
+
+    return {
+        "semantic_context": semantic_context
+    }
 
 
 def _get_answer_llm() -> ChatOpenAI:
