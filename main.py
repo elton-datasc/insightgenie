@@ -18,14 +18,15 @@ while True:
         break
 
     initial_state = {
-        "question": question,
-        "schema": schema,
-        "sql": "",
-        "query_result": "",
-        "answer": "",
-        "error": "",
-        "retry_count": 0
-    }
+    "question": question,
+    "schema": schema,
+    "semantic_context": "",
+    "sql": "",
+    "query_result": "",
+    "answer": "",
+    "error": "",
+    "retry_count": 0,
+}
 
     result = graph.invoke(
         initial_state
