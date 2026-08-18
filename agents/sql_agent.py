@@ -1,5 +1,11 @@
+import os
+
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+
+load_dotenv()
 
 
 class SQLResponse(BaseModel):
@@ -8,10 +14,21 @@ class SQLResponse(BaseModel):
     )
 
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0
-)
+def _get_llm() -> ChatOpenAI:
+    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_ADMIN_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Missing OpenAI credentials. Set OPENAI_API_KEY or OPENAI_ADMIN_KEY in the environment or .env file."
+        )
+
+    return ChatOpenAI(
+        model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+        temperature=0,
+        api_key=api_key,
+    )
+
+
+llm = _get_llm()
 
 
 structured_llm = llm.with_structured_output(
