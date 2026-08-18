@@ -61,3 +61,24 @@ BUSINESS_METRICS = {
         ],
     },
 }
+
+
+BUSINESS_DIMENSIONS = {
+    "customer": {
+        "name": "Cliente",
+        "description": "Cliente responsável pela operação.",
+        "column": "customer_name",
+    },
+
+    "region": {
+        "name": "Região",
+        "description": "Região geográfica do cliente.",
+        "column": "region",
+    },
+
+    "month": {
+        "name": "Mês",
+        "description": "Mês de referência da operação.",
+        "column": "month",
+    },
+}
