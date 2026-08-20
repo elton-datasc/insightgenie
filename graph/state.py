@@ -1,6 +1,8 @@
 from typing import TypedDict
 
 class AgentState(TypedDict):
+    interaction_id: str
+
     question: str
     normalized_question: str
 
@@ -14,5 +16,4 @@ class AgentState(TypedDict):
     error: str
 
     retry_count: int
-
 

@@ -12,14 +12,20 @@ from graph.state import AgentState
 from semantic.business_metrics import get_semantic_context
 from semantic.business_metrics import normalize_business_terms
 
+import langwatch
+
 
 load_dotenv()
+
+MODEL_NAME = "gpt-4o-mini"
+MODEL_TEMPERATURE = 0
 
 database = DatabaseClient()
 database.load_data("data/sales.csv")
 
 _answer_llm: Optional[ChatOpenAI] = None
 
+@langwatch.span(name="Load Semantic Context")
 def load_semantic_context_node(state: AgentState):
 
     semantic_context = get_semantic_context()
@@ -28,6 +34,7 @@ def load_semantic_context_node(state: AgentState):
         "semantic_context": semantic_context
     }
 
+@langwatch.span(name="Normalize Question")
 def normalize_question_node(state: AgentState):
 
     normalized_question = normalize_business_terms(
@@ -50,12 +57,12 @@ def _get_answer_llm() -> ChatOpenAI:
         )
 
     _answer_llm = ChatOpenAI(
-        model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        temperature=0,
+        model=MODEL_NAME,
+        temperature=MODEL_TEMPERATURE,
     )
     return _answer_llm
 
-
+@langwatch.span(name="Generate SQL")
 def generate_sql_node(state: AgentState):
 
     normalized_question = normalize_business_terms(
@@ -73,6 +80,7 @@ def generate_sql_node(state: AgentState):
         "error": "",
     }
 
+@langwatch.span(name="Validate SQL")
 def validate_sql_node(state: AgentState):
     sql = state["sql"].strip().lower()
     forbidden_commands = [
@@ -102,26 +110,45 @@ def route_after_validation(state: AgentState):
     return "execute"
 
 
-def regenerate_sql_node(state: AgentState):
+@langwatch.span(name="Generate SQL")
+def generate_sql_node(state: AgentState):
 
-    normalized_question = normalize_business_terms(
-        state["question"].lower()
+    span = langwatch.get_current_span()
+
+    span.update(
+        metadata={
+            "model": MODEL_NAME,
+            "temperature": MODEL_TEMPERATURE,
+            "operation": "text-to-sql",
+        }
+    )
+
+    span.update(
+        input={
+            "question": state["question"],
+            "normalized_question": state["normalized_question"],
+            "semantic_context": state["semantic_context"],
+        }
     )
 
     sql = generate_sql(
-        question=normalized_question,
+        question=state["normalized_question"],
         schema=state["schema"],
         semantic_context=state["semantic_context"],
-        previous_sql=state["sql"],
-        error=state["error"],
+    )
+
+    span.update(
+        output={
+            "sql": sql
+        }
     )
 
     return {
         "sql": sql,
         "error": "",
-        "retry_count": state["retry_count"] + 1,
     }
 
+@langwatch.span(name="Execute SQL")
 def execute_sql_node(state: AgentState):
     try:
         result = database.execute(state["sql"])
@@ -137,8 +164,18 @@ def route_after_execution(state: AgentState):
         return "retry"
     return "answer"
 
-
+@langwatch.span(name="Generate Answer")
 def generate_answer_node(state: AgentState):
+    span = langwatch.get_current_span()
+
+    span.update(
+        metadata={
+            "model": MODEL_NAME,
+            "temperature": MODEL_TEMPERATURE,
+            "operation": "generate-answer",
+        }
+    )
+
     prompt = f"""
 You are a business data analyst.
 

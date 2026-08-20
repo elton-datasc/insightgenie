@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
+MODEL_NAME = "gpt-4o-mini"
+MODEL_TEMPERATURE = 0
+
 
 class SQLResponse(BaseModel):
     sql: str = Field(
@@ -22,13 +25,14 @@ def _get_llm() -> ChatOpenAI:
         )
 
     return ChatOpenAI(
-        model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-        temperature=0,
+        model=MODEL_NAME,
+        temperature=MODEL_TEMPERATURE,
         api_key=api_key,
     )
 
 
 llm = _get_llm()
+
 
 
 structured_llm = llm.with_structured_output(
