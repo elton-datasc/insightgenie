@@ -150,11 +150,38 @@ def generate_sql_node(state: AgentState):
 
 @langwatch.span(name="Execute SQL")
 def execute_sql_node(state: AgentState):
+
+    span = langwatch.get_current_span()
+
     try:
-        result = database.execute(state["sql"])
-        return {"query_result": result.to_string(), "error": ""}
-    except Exception as exc:
-        return {"error": str(exc)}
+        result = database.execute(
+            state["sql"]
+        )
+
+        span.update(
+            output={
+                "result": result.to_string()
+            }
+        )
+
+        return {
+            "query_result": result.to_string(),
+            "error": "",
+        }
+
+    except Exception as e:
+
+        error_message = str(e)
+
+        span.update(
+            output={
+                "error": error_message
+            }
+        )
+
+        return {
+            "error": error_message
+        }
 
 
 def route_after_execution(state: AgentState):

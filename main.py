@@ -35,6 +35,18 @@ def run_query(question: str, schema: str):
 
     result = graph.invoke(initial_state)
 
+    trace.update(
+    metadata={
+        "interaction_id": interaction_id,
+        "agent": "InsightGenie",
+        "agent_version": "v5",
+        "database": "duckdb",
+        "workflow": "langgraph",
+        "retry_count": result["retry_count"],
+        "success": result["error"] == "",
+    }
+)
+
     return result
 
 database = DatabaseClient()
