@@ -11,6 +11,7 @@ from graph.state import AgentState
 
 from semantic.business_metrics import get_semantic_context
 from semantic.business_metrics import normalize_business_terms
+from evaluators.sql_validity import evaluate_sql_validity
 
 import langwatch
 
@@ -80,26 +81,33 @@ def generate_sql_node(state: AgentState):
         "error": "",
     }
 
-@langwatch.span(name="Validate SQL")
+@langwatch.span(
+    name="Validate SQL",
+    type="evaluation",
+)
 def validate_sql_node(state: AgentState):
-    sql = state["sql"].strip().lower()
-    forbidden_commands = [
-        "delete",
-        "drop",
-        "update",
-        "insert",
-        "alter",
-        "truncate",
-    ]
 
-    if not sql.startswith("select"):
-        return {"error": "Only SELECT queries are allowed."}
+    evaluation = evaluate_sql_validity(
+        state["sql"]
+    )
 
-    for command in forbidden_commands:
-        if command in sql:
-            return {"error": f"Forbidden SQL command detected: {command}"}
+    span = langwatch.get_current_span()
 
-    return {"error": ""}
+    span.add_evaluation(
+        name="sql_validity",
+        passed=evaluation["passed"],
+        score=evaluation["score"],
+        details=evaluation["details"],
+    )
+
+    if not evaluation["passed"]:
+        return {
+            "error": evaluation["details"]
+        }
+
+    return {
+        "error": ""
+    }
 
 
 def route_after_validation(state: AgentState):
