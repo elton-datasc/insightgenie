@@ -12,6 +12,7 @@ from graph.state import AgentState
 from semantic.business_metrics import get_semantic_context
 from semantic.business_metrics import normalize_business_terms
 from evaluators.sql_validity import evaluate_sql_validity
+from evaluators.semantic_sql import evaluate_semantic_sql
 
 import langwatch
 
@@ -242,8 +243,41 @@ def failure_node(state: AgentState):
         )
     }
 
+@langwatch.span(
+    name="Semantic SQL Evaluation",
+    type="evaluation",
+)
+def evaluate_semantic_sql_node(
+    state: AgentState,
+):
+
+    evaluation = evaluate_semantic_sql(
+        question=state["question"],
+        sql=state["sql"],
+    )
+
+    langwatch.get_current_span().add_evaluation(
+        name="semantic_sql_correctness",
+        passed=evaluation["passed"],
+        score=evaluation["score"],
+        details=evaluation["details"],
+    )
+
+    if not evaluation["passed"]:
+        return {
+            "error": evaluation["details"]
+        }
+
+    return {
+        "error": ""
+    }
+
 
 builder = StateGraph(AgentState)
+builder.add_node(
+    "evaluate_semantic_sql",
+    evaluate_semantic_sql_node,
+)
 builder.add_node("load_semantic_context",load_semantic_context_node)
 builder.add_node("generate_sql", generate_sql_node)
 builder.add_node("validate_sql", validate_sql_node)
@@ -259,7 +293,7 @@ builder.add_conditional_edges(
     "validate_sql",
     route_after_validation,
     {
-        "execute": "execute_sql",
+        "execute": "evaluate_semantic_sql",
         "retry": "regenerate_sql",
         "failed": "failure",
     },
@@ -270,6 +304,16 @@ builder.add_conditional_edges(
     route_after_execution,
     {
         "answer": "generate_answer",
+        "retry": "regenerate_sql",
+        "failed": "failure",
+    },
+)
+
+builder.add_conditional_edges(
+    "evaluate_semantic_sql",
+    route_after_validation,
+    {
+        "execute": "execute_sql",
         "retry": "regenerate_sql",
         "failed": "failure",
     },
