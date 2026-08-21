@@ -1,6 +1,6 @@
 # InsightGenie
 
-> An AI-powered Analytics Agent that enables users to explore business data through natural language by generating, validating and executing SQL queries using a business-aware semantic layer.
+> An AI-powered Analytics Agent that enables users to explore business data through natural language by generating, validating and executing SQL queries with business semantics, observability and AI evaluation.
 
 ---
 
@@ -8,9 +8,9 @@
 
 Modern organizations accumulate large volumes of structured data, but extracting insights often requires SQL knowledge, understanding of database schemas and familiarity with business rules.
 
-**InsightGenie** explores how Large Language Models (LLMs) and agentic workflows can bridge this gap.
+**InsightGenie** explores how Large Language Models (LLMs), semantic layers and agentic workflows can bridge this gap.
 
-Users can ask questions such as:
+Users can ask analytical questions such as:
 
 > *Which customer generated the highest revenue?*
 
@@ -18,11 +18,13 @@ Users can ask questions such as:
 
 > *How many customers were active in February?*
 
-The agent interprets the question, applies business definitions, generates SQL, validates and executes the query, and finally returns a grounded answer in natural language.
+The agent interprets the question, applies business definitions, generates SQL, validates and executes the query, and returns a grounded answer in natural language.
+
+The current version also introduces **observability and AI evaluation**, allowing the workflow to be traced and its quality measured.
 
 ---
 
-## Problem Statement
+# Problem Statement
 
 Traditional Text-to-SQL solutions can understand database schemas but may lack knowledge about the actual meaning of business metrics.
 
@@ -45,9 +47,11 @@ Positivation = Distinct active customers
 Revenue = SUM(revenue)
 ```
 
-Without this semantic knowledge, an LLM may generate SQL that is syntactically valid but incorrect from a business perspective.
+A generated SQL query can therefore be syntactically correct while still being incorrect from a business perspective.
 
-InsightGenie addresses this problem by combining:
+There is also another challenge: knowing whether an AI-generated analytical answer can actually be trusted.
+
+InsightGenie addresses these problems by combining:
 
 * Text-to-SQL
 * Business Semantic Layer
@@ -57,30 +61,34 @@ InsightGenie addresses this problem by combining:
 * Conditional routing
 * Automatic error recovery
 * Grounded answer generation
+* LangWatch observability
+* AI quality evaluation
 
 ---
 
-# Current Version — V4
+# Current Version — V5
 
-The current version introduces a **Business Semantic Layer**.
+The current version introduces **Observability & Evaluation** on top of the V4 Business Semantic Layer.
 
-The agent evolves from a:
-
-```text
-Schema-aware Agent
-```
-
-into a:
+The agent evolves from:
 
 ```text
 Business-aware Analytics Agent
 ```
 
-It understands both the physical database schema and explicit definitions of business metrics, dimensions and rules.
+into an:
+
+```text
+Observable
+Business-aware
+Analytics Agent
+```
+
+The workflow can now be inspected through traces and spans while different evaluators measure the quality of generated SQL and final answers.
 
 ---
 
-## Current Features
+# Current Features
 
 * Natural language analytical questions
 * LLM-based Text-to-SQL
@@ -94,10 +102,21 @@ It understands both the physical database schema and explicit definitions of bus
 * Shared agent state
 * Conditional routing
 * SQL safety validation
+* Semantic SQL validation
 * Automatic SQL regeneration
 * Retry control
 * Database error recovery
 * Grounded natural-language answers
+* LangWatch tracing
+* Workflow spans
+* Prompt and SQL tracing
+* Model metadata
+* Latency observability
+* Retry and error tracking
+* SQL validity evaluation
+* Semantic SQL correctness evaluation
+* Groundedness evaluation
+* Hallucination evaluation
 
 ---
 
@@ -127,19 +146,37 @@ It understands both the physical database schema and explicit definitions of bus
                yes       no
                 │         │
                 ▼         ▼
-          Execute SQL   Regenerate SQL
-                │         │
-                │         └──────────┐
-                ▼                    │
-          Execution OK?              │
-             /      \                 │
-           yes      no ───────────────┘
-            │
-            ▼
-       Generate Answer
-            │
-            ▼
-           END
+       Semantic Evaluation
+                │      Regenerate SQL
+                │         ▲
+                ▼         │
+           Execute SQL ────┘
+                │
+                ▼
+          Generate Answer
+                │
+                ▼
+          Evaluate Answer
+                │
+                ▼
+               END
+```
+
+Observability is applied across the workflow:
+
+```text
+                 LangWatch
+                    │
+        ┌───────────┼───────────┐
+        │           │           │
+        ▼           ▼           ▼
+      Traces      Metrics    Evaluations
+        │           │           │
+      Spans       Latency     SQL Validity
+      Prompt      Retries     Semantic SQL
+      SQL         Errors      Groundedness
+      Result      Model       Hallucination
+      Answer
 ```
 
 ---
@@ -175,11 +212,6 @@ SUM(revenue)
 Margin
     ↓
 SUM(revenue - cost)
-
-Margin Percentage
-    ↓
-(SUM(revenue) - SUM(cost))
-/ SUM(revenue) * 100
 
 Positivation
     ↓
@@ -219,13 +251,13 @@ For example, the database may store:
 while the user asks:
 
 ```text
-How many customers were active in February?
+Quantos clientes foram positivados em fevereiro?
 ```
 
-The normalization layer can translate:
+The normalization layer converts:
 
 ```text
-February
+fevereiro
     ↓
 2026-02
 ```
@@ -251,30 +283,84 @@ generate_sql
         ↓
 validate_sql
         ↓
+evaluate_semantic_sql
+        ↓
 execute_sql
         ↓
 generate_answer
+        ↓
+evaluate_answer
 ```
 
-Conditional routing allows the agent to recover from problems.
+Conditional routing allows the workflow to recover from invalid SQL, semantic problems and database execution errors.
 
 ```text
-                 ┌──→ execute_sql
-validate_sql ────┤
-                 └──→ regenerate_sql
+                         ┌── execute
+validate_sql ────────────┤
+                         └── regenerate
+
+                         ┌── execute
+semantic_evaluation ─────┤
+                         └── regenerate
+
+                         ┌── answer
+execute_sql ─────────────┤
+                         └── regenerate
 ```
 
-Database execution errors can also trigger SQL regeneration.
-
-A retry counter prevents infinite loops.
+A retry counter prevents infinite correction loops.
 
 ---
 
-# SQL Safety
+# Observability with LangWatch
 
-Generated SQL is validated before execution.
+V5 introduces LangWatch to provide visibility into the agent execution lifecycle.
 
-The current version is designed for analytical read operations and blocks commands such as:
+Each user interaction can be represented as a trace containing spans for important workflow operations.
+
+Example:
+
+```text
+InsightGenie Query
+│
+├── Load Semantic Context
+├── Normalize Question
+├── Generate SQL
+├── Validate SQL
+├── Semantic SQL Evaluation
+├── Execute SQL
+├── Generate Answer
+└── Answer Evaluation
+```
+
+This makes it possible to inspect how an answer was produced rather than observing only the final output.
+
+The observability layer tracks information such as:
+
+```text
+Question
+Normalized Question
+Generated SQL
+Query Result
+Final Answer
+Model
+Latency
+Retries
+Errors
+Evaluation Results
+```
+
+---
+
+# AI Evaluation
+
+V5 introduces four initial quality evaluations.
+
+## SQL Validity
+
+Checks whether generated SQL follows the allowed query rules.
+
+Examples of blocked operations:
 
 ```text
 INSERT
@@ -285,17 +371,68 @@ ALTER
 TRUNCATE
 ```
 
-Only `SELECT` queries should reach the database execution layer.
+Analytical execution is restricted to read operations.
 
-This creates a separation between:
+---
+
+## Semantic SQL Correctness
+
+Checks whether SQL respects known business definitions.
+
+Example:
 
 ```text
-LLM SQL Generation
-        ↓
-SQL Validation
-        ↓
-Database Execution
+Question:
+Quantos clientes foram positivados em fevereiro?
+
+Expected semantics:
+
+positivation → active = 1
+february    → 2026-02
 ```
+
+A query such as:
+
+```sql
+WHERE active = 1
+AND month = '2026-02'
+```
+
+passes the known semantic rules.
+
+---
+
+## Groundedness
+
+Evaluates whether the final natural-language answer is supported by the SQL result.
+
+Example:
+
+```text
+SQL Result:
+positivated_customers = 3
+
+Answer:
+Em fevereiro, foram positivados 3 clientes.
+```
+
+The answer is grounded because its factual claim comes directly from the query result.
+
+---
+
+## Hallucination Detection
+
+Checks whether the final answer introduces information that is not supported by the database result.
+
+This separates two different quality problems:
+
+```text
+SQL correctness
+       ≠
+Answer groundedness
+```
+
+A response can faithfully reproduce the result of an incorrect SQL query. For this reason, InsightGenie evaluates both SQL semantics and final-answer quality.
 
 ---
 
@@ -304,28 +441,54 @@ Database Execution
 Question:
 
 ```text
-Qual cliente teve maior margem?
+Quantos clientes foram positivados em fevereiro?
 ```
 
-Semantic definition:
+Normalized question:
 
 ```text
-Margin = SUM(revenue - cost)
+Quantos clientes foram positivados em 2026-02?
 ```
 
 Generated SQL:
 
 ```sql
 SELECT
-    customer_name,
-    SUM(revenue - cost) AS total_margin
+    COUNT(DISTINCT customer_id)
+        AS positivated_customers
 FROM sales
-GROUP BY customer_name
-ORDER BY total_margin DESC
-LIMIT 1;
+WHERE active = 1
+AND month = '2026-02';
 ```
 
-The query is validated, executed against DuckDB and the result is converted into a natural-language answer.
+Result:
+
+```text
+positivated_customers
+3
+```
+
+Final answer:
+
+```text
+Em fevereiro, foram positivados 3 clientes.
+```
+
+Evaluations:
+
+```text
+SQL Validity
+✓
+
+Semantic SQL Correctness
+✓
+
+Groundedness
+✓
+
+Hallucination Free
+✓
+```
 
 ---
 
@@ -348,6 +511,16 @@ insightgenie/
 ├── semantic/
 │   ├── __init__.py
 │   └── business_metrics.py
+│
+├── evaluators/
+│   ├── __init__.py
+│   ├── sql_validity.py
+│   ├── semantic_sql.py
+│   └── answer_quality.py
+│
+├── observability/
+│   ├── __init__.py
+│   └── langwatch_client.py
 │
 ├── graph/
 │   ├── __init__.py
@@ -397,10 +570,17 @@ Custom Python definitions for:
 * Business rules
 * Deterministic mappings
 
-### Planned
+### Observability & Evaluation
 
 * LangWatch
+* Traces
+* Spans
+* Custom Evaluators
+
+### Planned Data Platform
+
 * Databricks SQL
+* SQL Warehouse
 * Unity Catalog
 
 ---
@@ -446,6 +626,7 @@ Create a `.env` file:
 
 ```env
 OPENAI_API_KEY=your_openai_key
+LANGWATCH_API_KEY=your_langwatch_api_key
 ```
 
 Never commit API keys or secrets.
@@ -463,18 +644,22 @@ uv run python main.py
 Example:
 
 ```text
-Pergunta: Qual cliente teve maior margem?
+Pergunta:
+Quantos clientes foram positivados em fevereiro?
 
 SQL final:
-SELECT ...
+SELECT COUNT(DISTINCT customer_id)
+FROM sales
+WHERE active = 1
+AND month = '2026-02'
 
 Tentativas de correção: 0
 
 Resultado SQL:
-...
+3
 
 InsightGenie:
-...
+Em fevereiro, foram positivados 3 clientes.
 ```
 
 Use:
@@ -494,8 +679,8 @@ to terminate the application.
 * Natural language questions
 * SQL generation
 * DuckDB
-* CSV dataset
-* SQL execution
+* CSV datasets
+* Query execution
 
 ```text
 Question → SQL → DuckDB → Result
@@ -508,16 +693,6 @@ Question → SQL → DuckDB → Result
 * Workflow nodes
 * Natural-language answers
 
-```text
-generate_sql
-     ↓
-validate_sql
-     ↓
-execute_sql
-     ↓
-generate_answer
-```
-
 ## V3 — Conditional Workflow
 
 * Conditional routing
@@ -526,61 +701,35 @@ generate_answer
 * SQL regeneration
 * Database error recovery
 
-```text
-             ┌── execute
-validate ────┤
-             └── regenerate
-```
-
-## V4 — Semantic Layer
-
-**Current version**
+## V4 — Business Semantic Layer
 
 * Business metrics
 * Business dimensions
 * Business rules
-* Metric aliases
+* Aliases
 * Deterministic normalization
 * Semantic-aware Text-to-SQL
-* SQL guardrails
-* Conditional recovery
 
-```text
-Natural Language
-       +
-Business Semantics
-       +
-Text-to-SQL
-       +
-SQL Safety
-       +
-Conditional Recovery
-```
+## V5 — Observability & Evaluation
+
+**Current version**
+
+* LangWatch integration
+* Trace and span instrumentation
+* Prompt and SQL tracing
+* Model metadata
+* Latency observability
+* Retry/error tracking
+* SQL validity evaluation
+* Semantic SQL correctness
+* Groundedness evaluation
+* Hallucination detection
 
 ---
 
 # Roadmap
 
-## V5 — Observability & Evaluation
-
-Planned:
-
-* LangWatch integration
-* Trace IDs
-* Prompt and SQL tracing
-* Latency
-* Token usage
-* Model metadata
-* Retry/error tracking
-
-Initial evaluators:
-
-* SQL validity
-* Semantic SQL correctness
-* Groundedness
-* Hallucination detection
-
-## V6 — Databricks
+## V6 — Databricks Integration
 
 Planned:
 
@@ -588,17 +737,18 @@ Planned:
 * SQL Warehouse
 * Unity Catalog
 * Remote query execution
-* Controlled data access
+* Controlled catalog access
 
 ## V7 — Advanced Evaluation
 
 Planned:
 
-* LLM-as-a-Judge
-* Grounding score
-* Hallucination score
+* LLM-as-a-Judge expansion
+* Evaluation datasets
+* Regression testing
 * Answer relevance
 * Business-rule compliance
+* Evaluation dashboards
 
 ## V8 — FinOps
 
@@ -606,7 +756,7 @@ Planned:
 
 * Token consumption
 * Cost per interaction
-* Model costs
+* Model cost analysis
 * Latency analytics
 * Usage dashboards
 
@@ -644,19 +794,22 @@ Known mappings and validations should be handled by code whenever possible.
 Queries must pass validation before database execution.
 
 **Answers should be grounded.**
-Final answers must be based on query results.
+Final answers must be supported by query results.
 
 **Recovery should be controlled.**
-Retries are limited to prevent infinite agent loops.
+Retries are limited to prevent infinite loops.
 
-**Observability should be part of the architecture.**
-Tracing, evaluation and cost monitoring are planned as first-class capabilities.
+**AI systems should be observable.**
+A production-oriented agent should expose how requests are processed, not only their final answers.
+
+**AI quality should be measurable.**
+SQL correctness and answer quality are evaluated separately.
 
 ---
 
 # Learning Objectives
 
-InsightGenie explores:
+InsightGenie explores practical applications of:
 
 * Agentic AI
 * Text-to-SQL
@@ -666,19 +819,21 @@ InsightGenie explores:
 * Conditional routing
 * Self-correcting agents
 * SQL guardrails
-* Prompt Engineering
 * AI Observability
-* AI Evaluation
+* LLM Evaluation
+* Groundedness
+* Hallucination Detection
 * Enterprise Data Platforms
 * LLM Governance
+* Production AI Engineering
 
 ---
 
 # Status
 
-**Current:** `V4 — Business Semantic Layer`
+**Current:** `V5 — Observability & Evaluation`
 
-**Next:** `V5 — Observability & Evaluation with LangWatch`
+**Next:** `V6 — Databricks Integration`
 
 ---
 
